@@ -1,7 +1,7 @@
 name: videosdk-iot
-version: "0.0.3"
+version: "0.0.1"
 description: Videosdk IOT Component for ESP-IDF
-url: https://github.com/JayS0223/libpeer
+url: https://github.com/JayS0223/videosdk-libpeer
 license: MIT
 
 dependencies:

@@ -1,4 +1,4 @@
-/*-
+git remote add origin/*-
  * Copyright (c) 2009-2010 Brad Penoff
  * Copyright (c) 2009-2010 Humaira Kamal
  * Copyright (c) 2011-2012 Irene Ruengeler
