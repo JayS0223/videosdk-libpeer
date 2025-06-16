@@ -192,9 +192,9 @@ void videosdk_subscribe(ServiceConfiguration service_config) {
     return;
   }
   // Set the service configuration for signaling
-  peer_signaling_set_config(&service_config);
-  ESP_LOGI(TAG, "Subscribing to video stream...");
-  peer_signaling_whip_connect();
+  // peer_signaling_set_config(&service_config);
+  // ESP_LOGI(TAG, "Subscribing to video stream...");
+  // peer_signaling_whip_connect();
   ESP_LOGI(TAG, "Subscribed to video stream");
 }
 

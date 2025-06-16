@@ -1,9 +1,9 @@
 ## IDF Component Manager Manifest File
 dependencies:
-  # jays0223/videosdk-libpeer:
-  #   version: "*"
-  #   registry_url: https://components-staging.espressif.com
-  sepfy/libpeer: "0.0.2"
+  jays0223/videosdk-iot:
+    version: "*"
+    registry_url: https://components-staging.espressif.com
+  #sepfy/libpeer: "0.0.2"
   mdns: "*"
   espressif/esp_audio_codec: "^2.0.0"
   espressif/esp32-camera: "^2.0.4"
