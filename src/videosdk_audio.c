@@ -145,7 +145,7 @@ void videosdk_audio_task(void* arg) {
   float bytes = 0;
 
   last_time = get_timestamp();
- // ESP_LOGI(TAG, "audio task started");
+  ESP_LOGI(TAG, "audio task started");
 
   for (;;) {
     if (eState == PEER_CONNECTION_COMPLETED) {

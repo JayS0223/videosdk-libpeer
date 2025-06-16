@@ -1,7 +1,7 @@
 name: videosdk-iot
-version: "0.0.1"
+version: "0.0.2"
 description: Videosdk IOT Component for ESP-IDF
-url: https://github.com/JayS0223/videosdk-libpeer
+url: https://github.com/sepfy/libpeer
 license: MIT
 
 dependencies:
@@ -9,6 +9,7 @@ dependencies:
   sepfy/usrsctp: ^0.9.5
   espressif/esp_audio_codec: "^2.0.0"
   espressif/esp32-camera: "^2.0.4"
+  espressif/esp_http_client: "*"
   mdns: "*"
   idf:
     version: ">=5.0.0"

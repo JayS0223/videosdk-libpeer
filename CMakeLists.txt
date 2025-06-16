@@ -8,7 +8,7 @@ if (DEFINED ENV{IDF_PATH})
   idf_component_register(
    SRCS ${ESP32_CODES} ${HTTP_SOURCES} ${MQTT_SOURCES} ${MQTT_SERIALIZER_SOURCES}
    INCLUDE_DIRS "./src" ${HTTP_INCLUDE_PUBLIC_DIRS} ${MQTT_INCLUDE_PUBLIC_DIRS}
-   REQUIRES mbedtls srtp json esp_netif
+   REQUIRES mbedtls srtp json esp_netif esp_http_client
   )
   add_definitions("-DESP32 -DHTTP_DO_NOT_USE_CUSTOM_CONFIG -DMQTT_DO_NOT_USE_CUSTOM_CONFIG")
   return()

@@ -303,7 +303,7 @@ static int peer_signaling_http_post(const char *hostname, const char *path, int 
   LOGI("Connected to path %s:%s", hostname, path);
   LOGI("Body: %s", body);
   
-  res = peer_signaling_http_request(&trans_if, "POST", 4, hostname, strlen(hostname), "/whep",
+  res = peer_signaling_http_request(&trans_if, "POST", 4, hostname, strlen(hostname), path,
    strlen(path), auth, strlen(auth), body, strlen(body));
 
   ssl_transport_disconnect(&net_ctx);

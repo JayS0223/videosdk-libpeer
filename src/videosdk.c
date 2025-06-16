@@ -1,28 +1,129 @@
-#include "videosdk.h"
-#include "peer.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include "esp_event.h"
 #include "esp_log.h"
 #include "videosdk_audio.h"
-#include <stdbool.h> 
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "mdns.h"
+#include "peer.h"
+#include "videosdk.h"
+#include "esp_http_client.h"
+#include "cJSON.h"
+#define MAX_HTTP_OUTPUT_BUFFER 512
 static const char* TAG = "videosdk";
 char* local_meetingID = NULL;
 char* local_token = NULL;
 bool local_enableMic = true;
-static PeerConnection* g_pc = NULL;
-static PeerConnectionState eState = PEER_CONNECTION_CLOSED;
+
+struct MemoryStruct {
+    char *memory;
+    size_t size;
+};
+
+ PeerConnection* g_pc;
+ PeerConnectionState eState = PEER_CONNECTION_CLOSED;
+static TaskHandle_t xPcTaskHandle = NULL;
+static TaskHandle_t xLoopTaskHandle = NULL;
+SemaphoreHandle_t xSemaphore = NULL;
+
+static TaskHandle_t xAudioTaskHandle = NULL;
+extern esp_err_t videosdk_audio_init();
+extern void videosdk_audio_task(void* pvParameters);
+
+
+static videosdk_on_connection_state_changed_cb on_connection_state_changed_cb = NULL;
+void videosdk_set_connection_state_changed_cb(videosdk_on_connection_state_changed_cb cb) {
+  on_connection_state_changed_cb = cb;
+}
+
+int64_t get_timestamp() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return (tv.tv_sec * 1000LL + (tv.tv_usec / 1000LL));
+}
+
 
 static void oniceconnectionstatechange(PeerConnectionState state, void* user_data) {
   ESP_LOGI(TAG, "PeerConnectionState changed: %d (%s)", state, peer_connection_state_to_string(state));
   eState = state;
-  if (eState == PEER_CONNECTION_CONNECTED) {
-    ESP_LOGI(TAG, "DTLS handshake completed, connection is now CONNECTED");
-  } else if (eState == PEER_CONNECTION_COMPLETED) {
-    ESP_LOGI(TAG, "ICE and DTLS completed, connection is now COMPLETED");
-  } else if (eState == PEER_CONNECTION_FAILED) {
-    ESP_LOGE(TAG, "PeerConnection FAILED");
-  } else if (eState == PEER_CONNECTION_CLOSED) {
-    ESP_LOGW(TAG, "PeerConnection CLOSED");
+
+  if (on_connection_state_changed_cb) {
+    on_connection_state_changed_cb(state);  // Invoke the user-defined callback
   }
+
+  switch (state) {
+    case PEER_CONNECTION_CONNECTED:
+      ESP_LOGI(TAG, "DTLS handshake completed, connection is now CONNECTED");
+      break;
+    case PEER_CONNECTION_COMPLETED:
+      ESP_LOGI(TAG, "ICE and DTLS completed, connection is now COMPLETED");
+      break;
+    case PEER_CONNECTION_FAILED:
+      ESP_LOGE(TAG, "PeerConnection FAILED");
+      break;
+    case PEER_CONNECTION_CLOSED:
+      ESP_LOGW(TAG, "PeerConnection CLOSED");
+      break;
+    default:
+      break;
   }
+}
+
+void peer_connection_task(void* arg) {
+  ESP_LOGI(TAG, "peer_connection_task started");
+
+  for (;;) {
+    if (xSemaphoreTake(xSemaphore, portMAX_DELAY)) {
+      ESP_LOGD(TAG, "Calling peer_connection_loop, current state: %d (%s)", eState, peer_connection_state_to_string(eState));
+      peer_connection_loop(g_pc);
+      ESP_LOGI(TAG, "PeerConnection state after loop: %d (%s)", eState, peer_connection_state_to_string(eState));
+      xSemaphoreGive(xSemaphore);
+    }
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
+
+void videosdk_publish(){
+  ESP_LOGI(TAG, "Audio init  stream...");
+  videosdk_audio_init();
+  ESP_LOGI(TAG, "Audio initialized");
+
+}
+void videosdk_task(){
+  #if defined(CONFIG_ESP32S3_XIAO_SENSE)
+  StackType_t* stack_memory = (StackType_t*)heap_caps_malloc(8192 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+  StaticTask_t task_buffer;
+  ESP_LOGI(TAG, "Creating videosdk task with stack size: %d", 8192 * sizeof(StackType_t));
+  if (stack_memory) {
+    ESP_LOGI(TAG, "Creating audio task with stack size: %d", 8192 * sizeof(StackType_t));
+    xAudioTaskHandle = xTaskCreateStaticPinnedToCore(videosdk_audio_task, "audio", 8192, NULL, 7, stack_memory, &task_buffer, 0);
+    ESP_LOGI(TAG, "Audio task created: %p", xAudioTaskHandle);
+  }
+#endif
+ESP_LOGI(TAG, "Creating peer connection task with stack size: %d", 8192 * sizeof(StackType_t));
+  if (xPcTaskHandle) {
+    ESP_LOGI(TAG, "Peer connection task already exists, deleting it before creating a new one");
+    vTaskDelete(xPcTaskHandle);
+  }
+  if (xLoopTaskHandle) {
+    ESP_LOGI(TAG, "Loop task already exists, deleting it before creating a new one");
+    vTaskDelete(xLoopTaskHandle);
+  }
+ESP_LOGI(TAG, "Creating peer connection task with stack size: %d", 4096 * sizeof(StackType_t));
+
+  xTaskCreatePinnedToCore(peer_connection_task, "peer_connection", 8192, NULL, 5, &xPcTaskHandle, 1);
+ while(1){
+   vTaskDelay(pdMS_TO_TICKS(10));
+ }
+
+
+}
+
 
 esp_err_t videosdk_init(const char* meetingId, const char* token, const bool enableMic, const char* displayName) {
 
@@ -32,16 +133,17 @@ local_enableMic = enableMic;
   ESP_LOGI(TAG, "Initializing Video SDK with meetingId: %s, token: %s, enableMic: %d, displayName: %s",
            local_meetingID, local_token, local_enableMic, displayName);
   // Initialize audio if microphone is enabled
-
+xSemaphore = xSemaphoreCreateMutex();
   PeerConfiguration config = {
     .ice_servers = {
         {.urls = "stun:stun.l.google.com:19302"},
     },
-    #if(local_enableMic)
-    .audio_codec = CODEC_PCMA,
-    #endif
+    .audio_codec = local_enableMic ? CODEC_OPUS : CODEC_NONE
+
   };
 peer_init();
+videosdk_audio_init();
+
   ESP_LOGI(TAG, "Initializing Video SDK...");
 
   g_pc = peer_connection_create(&config);
@@ -56,6 +158,10 @@ peer_connection_oniceconnectionstatechange(g_pc, oniceconnectionstatechange);
   return ESP_OK;
 }
 
+
+
+
+
 esp_err_t videosdk_connect() {
 
   ServiceConfiguration service_config = SERVICE_CONFIG_DEFAULT();
@@ -69,32 +175,118 @@ esp_err_t videosdk_connect() {
   service_config.client_id = deviceid;
   service_config.mqtt_url = "broker.emqx.io";
 #endif
-  
-  peer_signaling_set_config(&service_config);
   ESP_LOGI(TAG, "Connecting to signaling server...");
+  peer_signaling_set_config(&service_config);
+  
   peer_signaling_whip_connect();
   ESP_LOGI(TAG, "Peer signaling configuration set (WHIP)");
   return ESP_OK;
 }
 
-void videosdk_loop() {
+
+
+
+void videosdk_subscribe(ServiceConfiguration service_config) {
   if (!g_pc) {
     ESP_LOGE(TAG, "PeerConnection is not initialized");
     return;
   }
-  // Run the peer connection loop
-  peer_connection_loop(g_pc);
-}
-void videosdk_publish(){
-  ESP_LOGI(TAG, "Audio init  stream...");
-  videosdk_audio_init();
-  ESP_LOGI(TAG, "Audio initialized");
-}
-
-void videosdk_subscribe(){
-
+  // Set the service configuration for signaling
+  peer_signaling_set_config(&service_config);
+  ESP_LOGI(TAG, "Subscribing to video stream...");
+  peer_signaling_whip_connect();
+  ESP_LOGI(TAG, "Subscribed to video stream");
 }
 
 void videosdk_disconnect(){
 
 }
+
+
+
+typedef struct {
+    char *data;
+    int len;
+} http_response_t;
+
+esp_err_t http_event_handler(esp_http_client_event_t *evt) {
+    http_response_t *response = (http_response_t *)evt->user_data;
+    
+    switch(evt->event_id) {
+        case HTTP_EVENT_ON_DATA:
+            response->data = realloc(response->data, response->len + evt->data_len + 1);
+            if (response->data == NULL) {
+                ESP_LOGE(TAG, "Memory allocation failed");
+                return ESP_FAIL;
+            }
+            memcpy(response->data + response->len, evt->data, evt->data_len);
+            response->len += evt->data_len;
+            response->data[response->len] = '\0';
+            break;
+        default:
+            break;
+    }
+    return ESP_OK;
+}
+
+char* create_meeting(const char* token) {
+    http_response_t response = {0};
+    char* room_id = NULL;
+
+    char auth_header[128];
+    snprintf(auth_header, sizeof(auth_header), "Bearer %s", token);
+
+    const char *post_data = "{\"region\": \"sg001\"}";
+
+    esp_http_client_config_t config = {
+        .url = "https://api.videosdk.live/v2/rooms",
+        .method = HTTP_METHOD_POST,
+        .event_handler = http_event_handler,
+        .user_data = &response,
+        .timeout_ms = 10000,
+        .skip_cert_common_name_check = true,
+        .use_global_ca_store = false,
+        .cert_pem = NULL,
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (!client) {
+        ESP_LOGE(TAG, "Failed to initialize HTTP client");
+        return NULL;
+    }
+
+    esp_http_client_set_header(client, "Authorization", auth_header);
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_post_field(client, post_data, strlen(post_data));
+
+    esp_err_t err = esp_http_client_perform(client);
+
+    if (err == ESP_OK) {
+        int status_code = esp_http_client_get_status_code(client);
+        ESP_LOGI(TAG, "Status: %d", status_code);
+        if (response.data) {
+            ESP_LOGI(TAG, "Response: %s", response.data);
+        }
+        if (status_code == 200 && response.data) {
+            cJSON *json = cJSON_Parse(response.data);
+            if (json) {
+                cJSON *room_id_json = cJSON_GetObjectItem(json, "roomId");
+                if (cJSON_IsString(room_id_json) && room_id_json->valuestring) {
+                    room_id = strdup(room_id_json->valuestring);
+                    ESP_LOGI(TAG, "Room ID: %s", room_id);
+                }
+                cJSON_Delete(json);
+            }
+        } else {
+            ESP_LOGE(TAG, "HTTP request failed with status: %d", status_code);
+        }
+    } else {
+        ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
+    }
+
+    esp_http_client_cleanup(client);
+    if (response.data) free(response.data);
+
+    return room_id;
+}
+
