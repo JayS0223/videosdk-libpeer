@@ -12,8 +12,7 @@
 #include "mdns.h"
 #include "peer.h"
 #include "videosdk.h"
-#include "esp_http_client.h"
-#include "cJSON.h"
+
 #define MAX_HTTP_OUTPUT_BUFFER 512
 static const char* TAG = "videosdk";
 char* local_meetingID = NULL;

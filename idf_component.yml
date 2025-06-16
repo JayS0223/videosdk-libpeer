@@ -1,5 +1,5 @@
 name: videosdk-iot
-version: "0.0.3"
+version: "0.0.4"
 description: Videosdk IOT Component for ESP-IDF
 url: https://github.com/sepfy/libpeer
 license: MIT
