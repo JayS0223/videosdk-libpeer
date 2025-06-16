@@ -204,89 +204,89 @@ void videosdk_disconnect(){
 
 
 
-typedef struct {
-    char *data;
-    int len;
-} http_response_t;
+// typedef struct {
+//     char *data;
+//     int len;
+// } http_response_t;
 
-esp_err_t http_event_handler(esp_http_client_event_t *evt) {
-    http_response_t *response = (http_response_t *)evt->user_data;
+// esp_err_t http_event_handler(esp_http_client_event_t *evt) {
+//     http_response_t *response = (http_response_t *)evt->user_data;
     
-    switch(evt->event_id) {
-        case HTTP_EVENT_ON_DATA:
-            response->data = realloc(response->data, response->len + evt->data_len + 1);
-            if (response->data == NULL) {
-                ESP_LOGE(TAG, "Memory allocation failed");
-                return ESP_FAIL;
-            }
-            memcpy(response->data + response->len, evt->data, evt->data_len);
-            response->len += evt->data_len;
-            response->data[response->len] = '\0';
-            break;
-        default:
-            break;
-    }
-    return ESP_OK;
-}
+//     switch(evt->event_id) {
+//         case HTTP_EVENT_ON_DATA:
+//             response->data = realloc(response->data, response->len + evt->data_len + 1);
+//             if (response->data == NULL) {
+//                 ESP_LOGE(TAG, "Memory allocation failed");
+//                 return ESP_FAIL;
+//             }
+//             memcpy(response->data + response->len, evt->data, evt->data_len);
+//             response->len += evt->data_len;
+//             response->data[response->len] = '\0';
+//             break;
+//         default:
+//             break;
+//     }
+//     return ESP_OK;
+// }
 
-char* create_meeting(const char* token) {
-    http_response_t response = {0};
-    char* room_id = NULL;
+// char* create_meeting(const char* token) {
+//     http_response_t response = {0};
+//     char* room_id = NULL;
 
-    char auth_header[128];
-    snprintf(auth_header, sizeof(auth_header), "Bearer %s", token);
+//     char auth_header[128];
+//     snprintf(auth_header, sizeof(auth_header), "Bearer %s", token);
 
-    const char *post_data = "{\"region\": \"sg001\"}";
+//     const char *post_data = "{\"region\": \"sg001\"}";
 
-    esp_http_client_config_t config = {
-        .url = "https://api.videosdk.live/v2/rooms",
-        .method = HTTP_METHOD_POST,
-        .event_handler = http_event_handler,
-        .user_data = &response,
-        .timeout_ms = 10000,
-        .skip_cert_common_name_check = true,
-        .use_global_ca_store = false,
-        .cert_pem = NULL,
-    };
+//     esp_http_client_config_t config = {
+//         .url = "https://api.videosdk.live/v2/rooms",
+//         .method = HTTP_METHOD_POST,
+//         .event_handler = http_event_handler,
+//         .user_data = &response,
+//         .timeout_ms = 10000,
+//         .skip_cert_common_name_check = true,
+//         .use_global_ca_store = false,
+//         .cert_pem = NULL,
+//     };
 
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) {
-        ESP_LOGE(TAG, "Failed to initialize HTTP client");
-        return NULL;
-    }
+//     esp_http_client_handle_t client = esp_http_client_init(&config);
+//     if (!client) {
+//         ESP_LOGE(TAG, "Failed to initialize HTTP client");
+//         return NULL;
+//     }
 
-    esp_http_client_set_header(client, "Authorization", auth_header);
-    esp_http_client_set_header(client, "Content-Type", "application/json");
-    esp_http_client_set_post_field(client, post_data, strlen(post_data));
+//     esp_http_client_set_header(client, "Authorization", auth_header);
+//     esp_http_client_set_header(client, "Content-Type", "application/json");
+//     esp_http_client_set_post_field(client, post_data, strlen(post_data));
 
-    esp_err_t err = esp_http_client_perform(client);
+//     esp_err_t err = esp_http_client_perform(client);
 
-    if (err == ESP_OK) {
-        int status_code = esp_http_client_get_status_code(client);
-        ESP_LOGI(TAG, "Status: %d", status_code);
-        if (response.data) {
-            ESP_LOGI(TAG, "Response: %s", response.data);
-        }
-        if (status_code == 200 && response.data) {
-            cJSON *json = cJSON_Parse(response.data);
-            if (json) {
-                cJSON *room_id_json = cJSON_GetObjectItem(json, "roomId");
-                if (cJSON_IsString(room_id_json) && room_id_json->valuestring) {
-                    room_id = strdup(room_id_json->valuestring);
-                    ESP_LOGI(TAG, "Room ID: %s", room_id);
-                }
-                cJSON_Delete(json);
-            }
-        } else {
-            ESP_LOGE(TAG, "HTTP request failed with status: %d", status_code);
-        }
-    } else {
-        ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
-    }
+//     if (err == ESP_OK) {
+//         int status_code = esp_http_client_get_status_code(client);
+//         ESP_LOGI(TAG, "Status: %d", status_code);
+//         if (response.data) {
+//             ESP_LOGI(TAG, "Response: %s", response.data);
+//         }
+//         if (status_code == 200 && response.data) {
+//             cJSON *json = cJSON_Parse(response.data);
+//             if (json) {
+//                 cJSON *room_id_json = cJSON_GetObjectItem(json, "roomId");
+//                 if (cJSON_IsString(room_id_json) && room_id_json->valuestring) {
+//                     room_id = strdup(room_id_json->valuestring);
+//                     ESP_LOGI(TAG, "Room ID: %s", room_id);
+//                 }
+//                 cJSON_Delete(json);
+//             }
+//         } else {
+//             ESP_LOGE(TAG, "HTTP request failed with status: %d", status_code);
+//         }
+//     } else {
+//         ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
+//     }
 
-    esp_http_client_cleanup(client);
-    if (response.data) free(response.data);
+//     esp_http_client_cleanup(client);
+//     if (response.data) free(response.data);
 
-    return room_id;
-}
+//     return room_id;
+// }
 
