@@ -31,6 +31,14 @@ typedef struct ServiceConfiguration {
 
 void peer_signaling_set_config(ServiceConfiguration *config);
 
+HTTPResponse_t peer_signaling_http_request(
+    const TransportInterface_t *transport_interface,
+    const char *method, size_t method_len,
+    const char *host, size_t host_len,
+    const char *path, size_t path_len,
+    const char *auth, size_t auth_len,
+    const char *body, size_t body_len);
+
 int peer_signaling_whip_connect();
 
 void peer_signaling_whip_disconnect();

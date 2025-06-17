@@ -12,7 +12,9 @@
 #include "mdns.h"
 #include "peer.h"
 #include "videosdk.h"
-
+#include <core_http_client.h>
+#include "peer_signaling.h"
+#include "ssl_transport.h"
 #define MAX_HTTP_OUTPUT_BUFFER 512
 static const char* TAG = "videosdk";
 char* local_meetingID = NULL;
@@ -202,90 +204,119 @@ void videosdk_disconnect(){
 }
 
 
+#define API_HOST "api.videosdk.live"
+#define API_PORT 443
+static struct {
+  char http_buf[8192]; // or bigger if needed
+  // other fields
+} g_ps;
+char* create_meeting(const char *auth_token) {
+  TransportInterface_t trans_if = {0};
+  NetworkContext_t net_ctx;
+  HTTPResponse_t res;
 
-// typedef struct {
-//     char *data;
-//     int len;
-// } http_response_t;
+  const char *body = "";  // Empty body for POST
+  int ret;
 
-// esp_err_t http_event_handler(esp_http_client_event_t *evt) {
-//     http_response_t *response = (http_response_t *)evt->user_data;
-    
-//     switch(evt->event_id) {
-//         case HTTP_EVENT_ON_DATA:
-//             response->data = realloc(response->data, response->len + evt->data_len + 1);
-//             if (response->data == NULL) {
-//                 ESP_LOGE(TAG, "Memory allocation failed");
-//                 return ESP_FAIL;
-//             }
-//             memcpy(response->data + response->len, evt->data, evt->data_len);
-//             response->len += evt->data_len;
-//             response->data[response->len] = '\0';
-//             break;
-//         default:
-//             break;
-//     }
-//     return ESP_OK;
-// }
+  trans_if.recv = ssl_transport_recv;
+  trans_if.send = ssl_transport_send;
+  trans_if.pNetworkContext = &net_ctx;
 
-// char* create_meeting(const char* token) {
-//     http_response_t response = {0};
-//     char* room_id = NULL;
+  ret = ssl_transport_connect(&net_ctx, API_HOST, API_PORT, NULL);
+  if (ret < 0) {
+    ESP_LOGE(TAG, "Connection failed to %s:%d", API_HOST, API_PORT);
+    return NULL;
+  }
 
-//     char auth_header[128];
-//     snprintf(auth_header, sizeof(auth_header), "Bearer %s", token);
+  ESP_LOGI(TAG, "Calling VideoSDK /v2/rooms...");
+  res = peer_signaling_http_request(
+    &trans_if,
+    "POST", strlen("POST"),
+    API_HOST, strlen(API_HOST),
+    "/v2/rooms", strlen("/v2/rooms"),
+    auth_token, strlen(auth_token),
+    body, strlen(body)
+  );
 
-//     const char *post_data = "{\"region\": \"sg001\"}";
+  ssl_transport_disconnect(&net_ctx);
 
-//     esp_http_client_config_t config = {
-//         .url = "https://api.videosdk.live/v2/rooms",
-//         .method = HTTP_METHOD_POST,
-//         .event_handler = http_event_handler,
-//         .user_data = &response,
-//         .timeout_ms = 10000,
-//         .skip_cert_common_name_check = true,
-//         .use_global_ca_store = false,
-//         .cert_pem = NULL,
-//     };
+  if (res.pBody == NULL || res.statusCode != 200) {
+    ESP_LOGE(TAG, "Create meeting failed. HTTP Status: %u", res.statusCode);
+    return NULL;
+  }
 
-//     esp_http_client_handle_t client = esp_http_client_init(&config);
-//     if (!client) {
-//         ESP_LOGE(TAG, "Failed to initialize HTTP client");
-//         return NULL;
-//     }
+  ESP_LOGI(TAG, "Response: %s", res.pBody);
 
-//     esp_http_client_set_header(client, "Authorization", auth_header);
-//     esp_http_client_set_header(client, "Content-Type", "application/json");
-//     esp_http_client_set_post_field(client, post_data, strlen(post_data));
+  // Simple extraction of "roomId" from JSON response
+  // Assumes format: {"roomId":"abc123"} (naive parser for demo)
+const char *body_str = (const char *)res.pBody;
+char *room_id_ptr = strstr(body_str, "\"roomId\":\"");
+  if (!room_id_ptr) return NULL;
 
-//     esp_err_t err = esp_http_client_perform(client);
+  room_id_ptr += strlen("\"roomId\":\""); // Move past the key
+  char *end_quote = strchr(room_id_ptr, '"');
+  if (!end_quote) return NULL;
 
-//     if (err == ESP_OK) {
-//         int status_code = esp_http_client_get_status_code(client);
-//         ESP_LOGI(TAG, "Status: %d", status_code);
-//         if (response.data) {
-//             ESP_LOGI(TAG, "Response: %s", response.data);
-//         }
-//         if (status_code == 200 && response.data) {
-//             cJSON *json = cJSON_Parse(response.data);
-//             if (json) {
-//                 cJSON *room_id_json = cJSON_GetObjectItem(json, "roomId");
-//                 if (cJSON_IsString(room_id_json) && room_id_json->valuestring) {
-//                     room_id = strdup(room_id_json->valuestring);
-//                     ESP_LOGI(TAG, "Room ID: %s", room_id);
-//                 }
-//                 cJSON_Delete(json);
-//             }
-//         } else {
-//             ESP_LOGE(TAG, "HTTP request failed with status: %d", status_code);
-//         }
-//     } else {
-//         ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
-//     }
+  size_t room_id_len = end_quote - room_id_ptr;
+  char *room_id = (char *)malloc(room_id_len + 1);
+  strncpy(room_id, room_id_ptr, room_id_len);
+  room_id[room_id_len] = '\0';
 
-//     esp_http_client_cleanup(client);
-//     if (response.data) free(response.data);
+  return room_id;
+}
 
-//     return room_id;
-// }
+char* validate_meeting(const char *auth_token, const char *meetingId) {
+  TransportInterface_t trans_if = {0};
+  NetworkContext_t net_ctx;
+  HTTPResponse_t res;
 
+  const char *body = "";  // Empty body for POST
+  int ret;
+
+  trans_if.recv = ssl_transport_recv;
+  trans_if.send = ssl_transport_send;
+  trans_if.pNetworkContext = &net_ctx;
+
+  ret = ssl_transport_connect(&net_ctx, API_HOST, API_PORT, NULL);
+  if (ret < 0) {
+    ESP_LOGE(TAG, "Connection failed to %s:%d", API_HOST, API_PORT);
+    return NULL;
+  }
+  char path[128];
+  snprintf(path, sizeof(path), "/v2/rooms/validate/%s", meetingId);
+  ESP_LOGI(TAG, "Calling VideoSDK /v2/rooms...");
+  res = peer_signaling_http_request(
+    &trans_if,
+    "GET", strlen("GET"),
+    API_HOST, strlen(API_HOST),
+    path, strlen(path),
+    auth_token, strlen(auth_token),
+    body, strlen(body)
+  );
+
+  ssl_transport_disconnect(&net_ctx);
+
+  if (res.pBody == NULL || res.statusCode != 200) {
+    ESP_LOGE(TAG, "Create meeting failed. HTTP Status: %u", res.statusCode);
+    return NULL;
+  }
+
+  ESP_LOGI(TAG, "Response: %s", res.pBody);
+
+  // Simple extraction of "roomId" from JSON response
+  // Assumes format: {"roomId":"abc123"} (naive parser for demo)
+const char *body_str = (const char *)res.pBody;
+char *room_id_ptr = strstr(body_str, "\"roomId\":\"");
+  if (!room_id_ptr) return NULL;
+
+  room_id_ptr += strlen("\"roomId\":\""); // Move past the key
+  char *end_quote = strchr(room_id_ptr, '"');
+  if (!end_quote) return NULL;
+
+  size_t room_id_len = end_quote - room_id_ptr;
+  char *room_id = (char *)malloc(room_id_len + 1);
+  strncpy(room_id, room_id_ptr, room_id_len);
+  room_id[room_id_len] = '\0';
+
+  return room_id;
+}

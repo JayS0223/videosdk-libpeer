@@ -50,9 +50,17 @@ void app_main(void) {
     ESP_LOGI(TAG, "Device ID: %s", deviceid);
   }
 
-// char *roomId = create_meeting("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlrZXkiOiI0N2M3ZTJlYy01NzY5LTQ3OWQtYjdjNS0zYjU5MDcxYzhhMDkiLCJwZXJtaXNzaW9ucyI6WyJhbGxvd19qb2luIl0sImlhdCI6MTY3MjgwOTcxMywiZXhwIjoxODMwNTk3NzEzfQ.KeXr1cxORdq6X7-sxBLLV7MsUnwuJGLaG8_VTyTFBig");
-// ESP_LOGI(TAG, "Created meeting with ID: %s", roomId);
-  videosdk_init("meetinfgId", "token", true, "displayName");
+char *roomId = create_meeting("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlrZXkiOiI0N2M3ZTJlYy01NzY5LTQ3OWQtYjdjNS0zYjU5MDcxYzhhMDkiLCJwZXJtaXNzaW9ucyI6WyJhbGxvd19qb2luIl0sImlhdCI6MTY3MjgwOTcxMywiZXhwIjoxODMwNTk3NzEzfQ.KeXr1cxORdq6X7-sxBLLV7MsUnwuJGLaG8_VTyTFBig");
+ ESP_LOGI(TAG, "Created meeting with ID: %s", roomId);
+ if(roomId != NULL) {
+char *validRoomID = validate_meeting("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlrZXkiOiI0N2M3ZTJlYy01NzY5LTQ3OWQtYjdjNS0zYjU5MDcxYzhhMDkiLCJwZXJtaXNzaW9ucyI6WyJhbGxvd19qb2luIl0sImlhdCI6MTY3MjgwOTcxMywiZXhwIjoxODMwNTk3NzEzfQ.KeXr1cxORdq6X7-sxBLLV7MsUnwuJGLaG8_VTyTFBig",roomId);
+ } else {
+    ESP_LOGE(TAG, "Failed to create meeting");
+    return;
+  }
+   
+
+  videosdk_init("meetingId", "token", true, "displayName");
 
   videosdk_connect();
   videosdk_task();

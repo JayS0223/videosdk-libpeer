@@ -6,6 +6,8 @@ typedef void (*videosdk_on_connection_state_changed_cb)(PeerConnectionState stat
 esp_err_t videosdk_init(const char* meetingId, const char* token, const bool enableMic, const char* displayName);
 esp_err_t videosdk_connect();
 void videosdk_task();
-char* create_meeting(const char *token);
+char* create_meeting( const char *auth_token);
+char* validate_meeting(
+    const char *auth_token, const char *meetingId);
 #endif
 
