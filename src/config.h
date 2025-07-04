@@ -68,7 +68,7 @@
 #endif
 
 #ifndef CONFIG_AUDIO_DURATION
-#define CONFIG_AUDIO_DURATION 20
+#define CONFIG_AUDIO_DURATION 20000
 #endif
 
 #define CONFIG_IPV6 0

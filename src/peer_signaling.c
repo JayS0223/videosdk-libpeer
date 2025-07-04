@@ -68,6 +68,8 @@ typedef struct PeerSignaling {
 
 } PeerSignaling;
 
+char * global_token;
+char * global_meetingId;
 static PeerSignaling g_ps;
 
 static void peer_signaling_mqtt_publish(MQTTContext_t *mqtt_ctx, const char *message) {
@@ -468,8 +470,9 @@ static void peer_signaling_onicecandidate(char *description, void *userdata) {
   }
 }
 
-int peer_signaling_whip_connect() {
-
+int peer_signaling_whip_connect(char * token, char meetingId) {
+  global_token = token;
+  global_meetingId = meetingId;
   if (g_ps.pc == NULL) {
     LOGW("PeerConnection is NULL");
     return -1;
@@ -480,7 +483,7 @@ int peer_signaling_whip_connect() {
 
   // ✅ Add both audio and video tracks before creating offer
 
-
+  
   peer_connection_create_offer(g_ps.pc);
 
   LOGI("peer_signaling_whip_connect() called");

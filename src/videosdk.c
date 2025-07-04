@@ -50,7 +50,7 @@ int64_t get_timestamp() {
 
 
 static void oniceconnectionstatechange(PeerConnectionState state, void* user_data) {
-  ESP_LOGI(TAG, "PeerConnectionState changed: %d (%s)", state, peer_connection_state_to_string(state));
+  ESP_LOGI(TAG, " changed: %d (%s)", state, peer_connection_state_to_string(state));
   eState = state;
 
   if (on_connection_state_changed_cb) {
@@ -126,7 +126,7 @@ ESP_LOGI(TAG, "Creating peer connection task with stack size: %d", 4096 * sizeof
 }
 
 
-esp_err_t videosdk_init(const char* meetingId, const char* token, const bool enableMic, const char* displayName) {
+esp_err_t videosdk_init(const char* meetingId, const char* token, const char* displayName) {
 
 local_meetingID = meetingId;
 local_token = token;
